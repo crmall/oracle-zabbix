@@ -1,0 +1,1 @@
+UserParameter=db.qtd_estacoes_online,sh /var/lib/zabbix/scripts/oracle-zabbix/zabbix_info.sh qtd_estacoes_online | sed -e 's/^[ \t]*//' -e 's/[ \t]*$//'
