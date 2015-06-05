@@ -16,7 +16,7 @@ export PATH=$ORACLE_HOME/bin:$PATH
 
 # Config File
 
-CONFIG_FILE="/var/lib/zabbix/scripts/zabbix_info_conf"
+CONFIG_FILE="/var/lib/zabbix/scripts/oracle-zabbix/zabbix_info_conf"
 
 # Carrega configuracoes
 if [ -f ${CONFIG_FILE} ]; then
