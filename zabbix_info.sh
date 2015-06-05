@@ -789,6 +789,24 @@ SELECT COUNT(DISTINCT(MACHINE)) FROM V\$SESSION WHERE USERNAME IS NOT NULL AND T
 EOF
 }
 
+function usuarios_crmall_online () {
+$SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
+SET PAGESIZE 0
+SET FEEDBACK OFF
+SET HEADING OFF
+SELECT  COUNT(DISTINCT(SID))  FROM V\$SESSION WHERE USERNAME IS NOT NULL AND TERMINAL <> 'unknown';
+EOF
+}
+
+function usuarios_wiseit_online () {
+$SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
+SET PAGESIZE 0
+SET FEEDBACK OFF
+SET HEADING OFF
+SELECT  COUNT(DISTINCT(SID))  FROM V\$SESSION WHERE OSUSER = 'wiseit';
+EOF
+}
+
 case $1 in
 							"lista_tablespace")
 													 lista_tablespace 
@@ -1008,6 +1026,14 @@ case $1 in
 						   					
                  "qtd_estacoes_online")
 										  			 qtd_estacoes_online
+													 ;;
+						   					
+                 "usuarios_crmall_online")
+										  			 usuarios_crmall_online
+													 ;;
+						   					
+                 "usuarios_crmall_online")
+										  			 usuarios_crmall_online
 													 ;;
 						   					
 												    *)

@@ -1,1 +1,2 @@
-UserParameter=db.qtd_estacoes_online,sh /var/lib/zabbix/scripts/oracle-zabbix/zabbix_info.sh qtd_estacoes_online | sed -e 's/^[ \t]*//' -e 's/[ \t]*$//'
+UserParameter=db.usuarios_crmall_online,sh /var/lib/zabbix/scripts/oracle-zabbix/zabbix_info.sh usuarios_crmall_online | sed -e 's/^[ \t]*//' -e 's/[ \t]*$//'
+UserParameter=db.usuarios_wiseit_online,sh /var/lib/zabbix/scripts/oracle-zabbix/zabbix_info.sh usuarios_wiseit_online | sed -e 's/^[ \t]*//' -e 's/[ \t]*$//'
