@@ -780,7 +780,14 @@ from
 EOF
 }
 
-
+function qtd_estacoes_online () {
+$SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
+SET PAGESIZE 0
+SET FEEDBACK OFF
+SET HEADING OFF
+SELECT COUNT(DISTINCT(MACHINE)) FROM V$SESSION WHERE USERNAME IS NOT NULL AND TERMINAL   <> 'unknown' AND TERMINAL NOT LIKE '%pts/%'; 
+EOF
+}
 
 case $1 in
 							"lista_tablespace")
@@ -997,6 +1004,10 @@ case $1 in
 						   					
                  "open_cursors_pct_used")
 										  			 open_cursors_pct_used
+													 ;;
+						   					
+                 "qtd_estacoes_online")
+										  			 qtd_estacoes_online
 													 ;;
 						   					
 												    *)
