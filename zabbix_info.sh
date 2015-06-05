@@ -1032,8 +1032,8 @@ case $1 in
 										  			 usuarios_crmall_online
 													 ;;
 						   					
-                 "usuarios_crmall_online")
-										  			 usuarios_crmall_online
+                 "usuarios_cliente_online")
+										  			 usuarios_wiseit_online
 													 ;;
 						   					
 												    *)
