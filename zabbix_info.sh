@@ -35,6 +35,12 @@ DATA_HORA=$(date +%Y-%m-%d-%H_%M_%S)
 
 # functions
 
+# Next Functino Shows only the column from function name, remove pharentheses, remove two words hiden, and remove blank lines.
+function show_options () {
+LIST1=$(cat zabbix_info.sh | grep function | cut -d" " -f2 |sed -e 's/([^()]*)//g'  | sed 's/\<functions\>//g' | sed 's/\<show_options\>//g'| sed '/^$/d')
+}
+
+
 function total_size_tbs_crmall() {
 $SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
 SET PAGESIZE 0
@@ -1038,7 +1044,8 @@ case $1 in
 						   					
 												    *)
 											       echo "Argumento Invalido"
-										          echo " Utilize apenas um desses: ${LIST1}"
+													 show_options
+										          echo " Utilize apenas um desses: ${LIST1}"| more
 												    ;;		
 
 esac
