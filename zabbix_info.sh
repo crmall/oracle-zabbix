@@ -35,8 +35,6 @@ DATA_HORA=$(date +%Y-%m-%d-%H_%M_%S)
 
 # functions
 
-
-
 function show_options () {
 LIST1=$(cat zabbix_info.sh | grep function | cut -d" " -f2 |sed -e 's/([^()]*)//g'  | sed 's/\<functions\>//g' | sed 's/\<show_options\>//g'| sed '/^$/d')
 }
