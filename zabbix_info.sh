@@ -36,7 +36,6 @@ DATA_HORA=$(date +%Y-%m-%d-%H_%M_%S)
 # functions
 
 
-# Shows only the column from function name, remove pharentheses, remove two words hiden, and remove blank lines.
 
 function show_options () {
 LIST1=$(cat zabbix_info.sh | grep function | cut -d" " -f2 |sed -e 's/([^()]*)//g'  | sed 's/\<functions\>//g' | sed 's/\<show_options\>//g'| sed '/^$/d')
