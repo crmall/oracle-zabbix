@@ -7,7 +7,22 @@
 # ---------------------------------------------------#
 # Variables
 
+##
+
+DATA=$(date +%Y-%m-%d)
+DATA_HORA=$(date +%Y-%m-%d-%H_%M_%S)
+CAT=$(which cat)
+GREP=$(which grep)
+SED=$(which sed)
+CUT=$(which cut)
+DATE=$(which date)
+HEAD=$(which head)
+WC=$(which wc)
+
+##
+
 # Oracle Paths
+
 export ORACLE_BASE=/u01/app/oracle
 export ORACLE_HOME=/u01/app/oracle/product/11.2.0/xe
 export ORACLE_SID=XE
@@ -26,17 +41,167 @@ else
    exit 1
 fi
 
+##
 
 SQLPLUS=`which sqlplus`
-DATA=$(date +%Y-%m-%d)
-DATA_HORA=$(date +%Y-%m-%d-%H_%M_%S)
-
-####
 
 # functions
 
+function verify_user_zabbix () {
+
+SYSTEM="system"
+
+echo "Informe a senha do Usuario SYSTEM"
+read -s SYSTEM_PASS
+
+
+RETORNO=$($SQLPLUS -S ${SYSTEM}/${SYSTEM_PASS}  <<EOF
+SET PAGESIZE 0
+SET FEEDBACK OFF
+SET HEADING OFF
+set numformat 99999999999999999999
+SET PAGESIZE 0
+SET FEEDBACK OFF
+SET HEADING OFF
+SELECT USERNAME FROM DBA_USERS WHERE USERNAME ='ZABBIX';
+EOF
+)
+
+if [ ${RETORNO} == "ZABBIX" ]; then
+	echo "Usuario existente"
+	exit 0
+else
+	echo "Usuario nao existe!"
+	echo "Criando Usuario ZABBIX no banco de dados"
+	gen_pass_for_zabbix
+#	exit 1
+fi
+}
+
+function gen_pass_for_zabbix () {
+GEN_PASS=$(${DATE} +%s | sha256sum | base64 | ${HEAD} -c 12 ; echo)
+
+echo "USERNAME=\"zabbix"\" > ${CONFIG_FILE}
+echo "PASSWORD=\"${GEN_PASS}"\" >> ${CONFIG_FILE}
+
+PASSWORD_ZABBIX=$(${CAT} ${CONFIG_FILE}  | ${GREP} PASS | ${CUT} -d'"' -f2)
+
+echo "CREATE USER ZABBIX
+IDENTIFIED BY \"${PASSWORD_ZABBIX}\" 
+DEFAULT TABLESPACE USERS
+TEMPORARY TABLESPACE TEMP
+PROFILE DEFAULT
+ACCOUNT UNLOCK
+/
+GRANT ALTER SESSION TO ZABBIX
+/
+GRANT CREATE SESSION TO ZABBIX
+/
+GRANT CONNECT TO ZABBIX
+/
+ALTER USER ZABBIX DEFAULT ROLE ALL
+/
+GRANT SELECT ON V_\$INSTANCE TO ZABBIX
+/
+GRANT SELECT ON DBA_USERS TO ZABBIX
+/
+GRANT SELECT ON V_\$LOG_HISTORY TO ZABBIX
+/
+GRANT SELECT ON V_\$PARAMETER TO ZABBIX
+/
+GRANT SELECT ON SYS.DBA_AUDIT_SESSION TO ZABBIX
+/
+GRANT SELECT ON V_\$LOCK TO ZABBIX
+/
+GRANT SELECT ON DBA_REGISTRY TO ZABBIX
+/
+GRANT SELECT ON V_\$LIBRARYCACHE TO ZABBIX
+/
+GRANT SELECT ON V_\$SYSSTAT TO ZABBIX
+/
+GRANT SELECT ON V_\$PARAMETER TO ZABBIX
+/
+GRANT SELECT ON V_\$LATCH TO ZABBIX
+/
+GRANT SELECT ON V_\$PGASTAT TO ZABBIX
+/
+GRANT SELECT ON V_\$SGASTAT TO ZABBIX
+/
+GRANT SELECT ON V_\$LIBRARYCACHE TO ZABBIX
+/
+GRANT SELECT ON V_\$PROCESS TO ZABBIX
+/
+GRANT SELECT ON DBA_DATA_FILES TO ZABBIX
+/
+GRANT SELECT ON DBA_TEMP_FILES TO ZABBIX
+/
+GRANT SELECT ON DBA_FREE_SPACE TO ZABBIX
+/
+GRANT SELECT ON V_\$SYSTEM_EVENT TO ZABBIX
+/
+GRANT EXECUTE ON DBMS_NETWORK_ACL_ADMIN TO ZABBIX
+/
+  GRANT SELECT ON SYS.V_\$SESSION TO ZABBIX
+/
+  GRANT SELECT ON SYS.V_\$SHARED_SERVER TO ZABBIX
+/
+  GRANT SELECT ON SYS.V_\$SESSION TO ZABBIX
+/
+  GRANT SELECT ON SYS.DBA_OBJECTS TO ZABBIX
+/ 
+  GRANT SELECT ON SYS.DBA_DATA_FILES TO ZABBIX
+/
+  GRANT SELECT ON SYS.DBA_SEGMENTS TO ZABBIX
+/
+  GRANT SELECT ON SYS.DBA_TABLESPACES TO ZABBIX
+/
+  GRANT SELECT ON SYS.V_\$DATABASE TO ZABBIX
+/
+  GRANT SELECT ON SYS.V_\$ARCHIVED_LOG TO ZABBIX
+/
+  GRANT SELECT ON SYS.V_\$PARAMETER TO ZABBIX
+/
+  GRANT SELECT ON SYS.V_\$PGASTAT TO ZABBIX
+/
+  GRANT SELECT ON SYS.V_\$SGASTAT TO ZABBIX
+/
+  GRANT SELECT ON SYS.V_\$SYSTEM_EVENT TO ZABBIX
+/
+  GRANT SELECT ON SYS.DBA_USERS TO ZABBIX
+/
+  GRANT SELECT ON SYS.V_\$LOG_HISTORY TO ZABBIX
+/
+  GRANT SELECT ON SYS.V_\$DATABASE TO ZABBIX
+/
+  GRANT SELECT ON SYS.DBA_INDEXES TO ZABBIX
+/
+GRANT SELECT ON V_\$ROWCACHE TO ZABBIX
+/
+GRANT SELECT ON V_\$PARAMETER TO ZABBIX
+/
+GRANT SELECT ON V_\$STATNAME TO ZABBIX
+/
+GRANT SELECT ON V_\$SESSTAT TO ZABBIX
+/" > /var/lib/zabbix/scripts/oracle-zabbix/Criar_usuario_zabbix.sql
+
+CHECK_ZABBIX_AGENTD=$($CAT /etc/zabbix/zabbix_agentd.conf | ${GREP} database | ${WC} -l)
+
+if [ ${CHECK_ZABBIX_AGENTD} = 0  ]; then
+  echo "Adicionando itens no /etc/zabbix/zabbix_agentd.conf"
+  ${CAT} zabbix_agentd_conf >> /etc/zabbix/zabbix_agentd.conf  
+  echo "Reiniciando zabbix-agent..."
+  service zabbix-agent restart  
+  echo "Zabbix esta configurado, agora adicione o template no Host do cliente!"
+  exit 0
+else
+  echo "Saindo...Arquivo ja configurado"
+  exit 1
+fi
+
+}
+
 function show_options () {
-LIST1=$(cat zabbix_info.sh | grep function | cut -d" " -f2 |sed -e 's/([^()]*)//g'  | sed 's/\<functions\>//g' | sed 's/\<show_options\>//g'| sed '/^$/d')
+LIST1=$(${CAT} zabbix_info.sh | ${GREP} function | ${CUT} -d" " -f2 | ${SED} -e 's/([^()]*)//g'  | ${SED} 's/\<functions\>//g' | ${SED} 's/\<show_options\>//g'| ${SED} '/^$/d')
 }
 
 
@@ -106,7 +271,7 @@ ORDER BY DT.TABLESPACE_NAME
 EOF
 
 
-TOTAL=`cat tablespaces_3 | wc -l`
+TOTAL=`${CAT} tablespaces_3 | ${WC} -l`
 i=0
 
 # Cria lista JSON
@@ -114,7 +279,7 @@ i=0
 echo "{" > lista_tablespaces_3
 echo "  \"data\":[" >> lista_tablespaces_3
 
-for X in `cat tablespaces_3`; do
+for X in `${CAT} tablespaces_3`; do
 
 i=$((i+1))
 
@@ -815,6 +980,14 @@ EOF
 case $1 in
 							"lista_tablespace")
 													 lista_tablespace 
+													 ;;
+
+                 "gen_pass_for_zabbix")
+										  			 gen_pass_for_zabbix
+													 ;;
+						   					
+							"verify_user_zabbix")
+													 verify_user_zabbix 
 													 ;;
 
 							  "total_size_tbs_crmall")
