@@ -47,15 +47,20 @@ SQLPLUS=`which sqlplus`
 
 # functions
 
+function password () {
+
+echo "Informe o usuario SYSADMIN"
+read SYSTEM
+
+echo "Informe a senha do Usuario SYSTEM"
+read SYSTEM_PASS
+}
+
 function validate_password () {
 
 # validando senha
 
-SYSTEM="system"
-
-echo "Informe a senha do Usuario SYSTEM"
-read -s SYSTEM_PASS
-#read  SYSTEM_PASS
+password
 
 VALIDATING=$(exit | ${SQLPLUS} -L ${SYSTEM}/${SYSTEM_PASS} | ${GREP} Connected | ${WC} -l )
 
@@ -99,6 +104,12 @@ fi
 }
 
 function gen_pass_for_zabbix () {
+password
+
+echo "Criando usuario zabbix"
+
+
+exit 0
 GEN_PASS=$(${DATE} +%s | sha256sum | base64 | ${HEAD} -c 12 ; echo)
 
 echo "USERNAME=\"zabbix"\" > ${CONFIG_FILE}
@@ -203,6 +214,11 @@ GRANT SELECT ON V_\$STATNAME TO ZABBIX
 /
 GRANT SELECT ON V_\$SESSTAT TO ZABBIX
 /" > /var/lib/zabbix/scripts/oracle-zabbix/Criar_usuario_zabbix.sql
+echo "Criar usuario ZABBIX"
+echo " "
+password
+echo " "
+${SQLPLUS} -s ${SYSTEM}/${SYSTEM_PASS}@/var/lib/zabbix/scripts/oracle-zabbix/Criar_usuario_zabbix.sql
 
 CHECK_ZABBIX_AGENTD=$($CAT /etc/zabbix/zabbix_agentd.conf | ${GREP} database | ${WC} -l)
 
@@ -1075,7 +1091,7 @@ case $1 in
 													 ;;
 
 					  "db_archivelog_status")
-										  			db_archivelog_status |  wc -l
+										  			db_archivelog_status | wc -l
 													 ;;
 
   						   "db_archived_last")
