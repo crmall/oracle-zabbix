@@ -3,7 +3,7 @@
 # ---------------------------------------------------#
 # Oracle - Zabbix Info (CRMALL)							  #
 #																	  #
-# Josue Pirolo & Robson Mantovani - 03/2015			  #
+# Josue Pirolo - 03/2015			  #
 # ---------------------------------------------------#
 # Variables
 
