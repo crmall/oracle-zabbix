@@ -1,14 +1,14 @@
 #!/bin/sh
 
-# ---------------------------------------------------#
-# Oracle - Zabbix Info (CRMALL)							  #
-#																	  #
-# Josue Pirolo - 03/2015			  #
-# ---------------------------------------------------#
+# ------------------------------#
+# Oracle - Zabbix Info (CRMALL) #
+#                     #
+# Josue Pirolo 03/2015        #
+# ------------------------------#
+
 # Variables
 
-##
-
+# Applications
 DATA=$(date +%Y-%m-%d)
 DATA_HORA=$(date +%Y-%m-%d-%H_%M_%S)
 CAT=$(which cat)
@@ -18,33 +18,53 @@ CUT=$(which cut)
 DATE=$(which date)
 HEAD=$(which head)
 WC=$(which wc)
-
+SQLPLUS=$(which sqlplus)
+RM=$(which rm)
+CONFIG_FILE="/var/lib/zabbix/scripts/oracle-zabbix/config_user"
+ORACLE_FILE="/var/lib/zabbix/scripts/oracle-zabbix/config_oracle"
 ##
 
-# Oracle Paths
+##
+##
+# Oracle Variables
 
-export ORACLE_BASE=/u01/app/oracle
-export ORACLE_HOME=/u01/app/oracle/product/11.2.0/xe
-export ORACLE_SID=XE
-export NLS_LANG=`$ORACLE_HOME/bin/nls_lang.sh`
-export PATH=$ORACLE_HOME/bin:$PATH
+##
+##
+##
+##
+# Isolated Oracle Variable Environment Function
+function oracle_env () {
+#
+VERSAO_10="/usr/lib/oracle/xe/app/oracle/product/10.2.0/server/bin/oracle_env.sh"
+VERSAO_11="/u01/app/oracle/product/11.2.0/xe/bin/oracle_env.sh"
 
-# Config File
-
-CONFIG_FILE="/var/lib/zabbix/scripts/oracle-zabbix/zabbix_info_conf"
-
-# Carrega configuracoes
-if [ -f ${CONFIG_FILE} ]; then
-   . ${CONFIG_FILE}
+if   [ -f $VERSAO_10  ]; then
+	cat $VERSAO_10 > $ORACLE_FILE
+	exit 0
+elif [ -f $VERSAO_11 ]; then
+	cat $VERSAO_11 > $ORACLE_FILE
+	exit 0
 else
-   echo "Sem arquivo de configuracao..."
-   exit 1
+	echo "No Oracle Database Installed"
+	exit 1
 fi
-
+}
 ##
-
-SQLPLUS=`which sqlplus`
-
+##
+##
+##
+# Oracle Paths
+# Carrega configuracoes
+if [ -f $ORACLE_FILE ]; then
+   . $ORACLE_FILE
+else
+   echo "Sem arquivo de variavies de ambiente do Oracle..Executando function oracle_env agora..."
+	oracle_env
+fi
+##
+##
+##
+##
 # functions
 
 function password () {
@@ -53,34 +73,16 @@ echo "Informe o usuario SYSADMIN"
 read SYSTEM
 
 echo "Informe a senha do Usuario SYSTEM"
-read SYSTEM_PASS
-}
-
-function validate_password () {
-
-# validando senha
-
-password
-
-VALIDATING=$(exit | ${SQLPLUS} -L ${SYSTEM}/${SYSTEM_PASS} | ${GREP} Connected | ${WC} -l )
-
-if [ ${VALIDATING} = 0 ]
-then
-	echo "Senha Invalida"
-else
-   echo "Senha Valida"
-	verify_user_zabbix
-	exit 1
-fi
+read -s SYSTEM_PASS
 }
 
 function verify_user_zabbix () {
-
-
-
+#
+password
+#
 # Continuando com os passos seguintes
-
-RETORNO=$($SQLPLUS -S ${SYSTEM}/${SYSTEM_PASS}  <<EOF
+#
+RETORNO=$($SQLPLUS -S ${SYSTEM}/${SYSTEM_PASS} as sysdba  <<EOF
 SET PAGESIZE 0
 SET FEEDBACK OFF
 SET HEADING OFF
@@ -88,28 +90,25 @@ set numformat 99999999999999999999
 SET PAGESIZE 0
 SET FEEDBACK OFF
 SET HEADING OFF
-SELECT USERNAME FROM DBA_USERS WHERE USERNAME ='ZABBIX';
+SELECT COUNT(USERNAME) FROM DBA_USERS WHERE USERNAME ='ZABBIX';
 EOF
 )
-
-if [ ${RETORNO} == "ZABBIX" ]; then
-	echo "Usuario existente"
-	exit 0
+echo $RETORNO
+##
+##
+if [ ${RETORNO} -eq 1 ]; then
+  echo "Usuario existente"
 else
-	echo "Usuario nao existe!"
-	echo "Criando Usuario ZABBIX no banco de dados"
-	gen_pass_for_zabbix
-#	exit 1
+  echo "Usuario nao existe...Inicializando processo de criacao"
+  gen_pass_for_zabbix
 fi
 }
 
 function gen_pass_for_zabbix () {
-password
 
 echo "Criando usuario zabbix"
 
 
-exit 0
 GEN_PASS=$(${DATE} +%s | sha256sum | base64 | ${HEAD} -c 12 ; echo)
 
 echo "USERNAME=\"zabbix"\" > ${CONFIG_FILE}
@@ -117,7 +116,25 @@ echo "PASSWORD=\"${GEN_PASS}"\" >> ${CONFIG_FILE}
 
 PASSWORD_ZABBIX=$(${CAT} ${CONFIG_FILE}  | ${GREP} PASS | ${CUT} -d'"' -f2)
 
-echo "CREATE USER ZABBIX
+echo "CREATE PROFILE CRMALL_3 LIMIT
+COMPOSITE_LIMIT                  UNLIMITED
+SESSIONS_PER_USER                UNLIMITED
+CPU_PER_SESSION                  UNLIMITED
+CPU_PER_CALL                     UNLIMITED
+LOGICAL_READS_PER_SESSION        UNLIMITED
+LOGICAL_READS_PER_CALL           UNLIMITED
+IDLE_TIME                        UNLIMITED
+CONNECT_TIME                     UNLIMITED
+PRIVATE_SGA                      UNLIMITED
+FAILED_LOGIN_ATTEMPTS            10
+PASSWORD_LIFE_TIME               UNLIMITED
+PASSWORD_REUSE_TIME              UNLIMITED
+PASSWORD_REUSE_MAX               UNLIMITED
+PASSWORD_VERIFY_FUNCTION         NULL
+PASSWORD_LOCK_TIME               1
+PASSWORD_GRACE_TIME              7
+/
+CREATE USER ZABBIX
 IDENTIFIED BY \"${PASSWORD_ZABBIX}\" 
 DEFAULT TABLESPACE USERS
 TEMPORARY TABLESPACE TEMP
@@ -179,7 +196,7 @@ GRANT EXECUTE ON DBMS_NETWORK_ACL_ADMIN TO ZABBIX
   GRANT SELECT ON SYS.V_\$SESSION TO ZABBIX
 /
   GRANT SELECT ON SYS.DBA_OBJECTS TO ZABBIX
-/ 
+/
   GRANT SELECT ON SYS.DBA_DATA_FILES TO ZABBIX
 /
   GRANT SELECT ON SYS.DBA_SEGMENTS TO ZABBIX
@@ -213,190 +230,362 @@ GRANT SELECT ON V_\$PARAMETER TO ZABBIX
 GRANT SELECT ON V_\$STATNAME TO ZABBIX
 /
 GRANT SELECT ON V_\$SESSTAT TO ZABBIX
+/
+GRANT SELECT ON DBA_ROLE_PRIVS TO ZABBIX
+/
+GRANT SELECT ON DBA_ROLES TO ZABBIX
+/
+ALTER USER SYSTEM PROFILE CRMALL_3
+/
+ALTER USER CRMALL PROFILE CRMALL_3
+/
+ALTER USER CLIENTE PROFILE CRMALL_3
+/
+ALTER USER CORREIO PROFILE CRMALL_3
+/
+QUIT
 /" > /var/lib/zabbix/scripts/oracle-zabbix/Criar_usuario_zabbix.sql
-echo "Criar usuario ZABBIX"
+##
+##
+##
+##
 echo " "
-password
-echo " "
-${SQLPLUS} -s ${SYSTEM}/${SYSTEM_PASS}@/var/lib/zabbix/scripts/oracle-zabbix/Criar_usuario_zabbix.sql
-
-CHECK_ZABBIX_AGENTD=$($CAT /etc/zabbix/zabbix_agentd.conf | ${GREP} database | ${WC} -l)
-
-if [ ${CHECK_ZABBIX_AGENTD} = 0  ]; then
-  echo "Adicionando itens no /etc/zabbix/zabbix_agentd.conf"
-  ${CAT} zabbix_agentd_conf >> /etc/zabbix/zabbix_agentd.conf  
-  echo "Reiniciando zabbix-agent..."
-  service zabbix-agent restart  
-  echo "Zabbix esta configurado, agora adicione o template no Host do cliente!"
-  exit 0
-else
-  echo "Saindo...Arquivo ja configurado"
-  exit 1
-fi
-
+$SQLPLUS -S ${SYSTEM}/${SYSTEM_PASS} as sysdba @Criar_usuario_zabbix.sql
+$RM -f Criar_usuario_zabbix.sql
+##
+##
+##
+##
 }
+###############################
+##										#
+## Load Zabbix User Variables #
+. $CONFIG_FILE						#
+##										#
+###############################
 
-function show_options () {
-LIST1=$(${CAT} zabbix_info.sh | ${GREP} function | ${CUT} -d" " -f2 | ${SED} -e 's/([^()]*)//g'  | ${SED} 's/\<functions\>//g' | ${SED} 's/\<show_options\>//g'| ${SED} '/^$/d')
-}
+function total_tbs_crmall() {
 
-
-function total_size_tbs_crmall() {
 $SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
 SET PAGESIZE 0
 SET FEEDBACK OFF
 SET HEADING OFF
 set numformat 99999999999999999999
-SET PAGESIZE 0
-SET FEEDBACK OFF
-SET HEADING OFF
-SELECT BYTES FROM DBA_DATA_FILES WHERE TABLESPACE_NAME LIKE '%CRMALL%';
+SELECT SUM(DT.BYTES)
+FROM DBA_DATA_FILES DT
+INNER JOIN  DBA_USERS U
+ON U.DEFAULT_TABLESPACE = DT.TABLESPACE_NAME
+AND DT.TABLESPACE_NAME LIKE '%CRMALL%'
+AND U.PROFILE NOT IN ('DEFAULT','MONITORING_PROFILE','CRMALL_4C_CLIENTES_USER','HOMOLOGACAO','CRMALL_4C_INTERNO_USER');
+ 
 EOF
 }
 
-function total_size_tbs_cliente() {
+function total_tbs_cliente() {
+
 $SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
 SET PAGESIZE 0
 SET FEEDBACK OFF
 SET HEADING OFF
 set numformat 99999999999999999999
-SET PAGESIZE 0
-SET FEEDBACK OFF
-SET HEADING OFF
-SELECT BYTES FROM DBA_DATA_FILES WHERE TABLESPACE_NAME LIKE '%CLIENTE%';
+SELECT SUM(DT.BYTES)
+FROM DBA_DATA_FILES DT
+INNER JOIN  DBA_USERS U
+ON U.DEFAULT_TABLESPACE = DT.TABLESPACE_NAME
+AND DT.TABLESPACE_NAME LIKE '%CLIENTE%' 
+AND U.PROFILE NOT      IN ('DEFAULT','MONITORING_PROFILE','CRMALL_4C_CLIENTES_USER','HOMOLOGACAO','CRMALL_4C_INTERNO_USER');
 EOF
 }
 
-function total_size_tbs_correio() {
+function total_tbs_correio() {
+
 $SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
 SET PAGESIZE 0
 SET FEEDBACK OFF
 SET HEADING OFF
 set numformat 99999999999999999999
-SET PAGESIZE 0
-SET FEEDBACK OFF
-SET HEADING OFF
-SELECT BYTES FROM DBA_DATA_FILES WHERE TABLESPACE_NAME LIKE '%CORREIO%';
+SELECT SUM(DT.BYTES)
+FROM DBA_DATA_FILES DT
+INNER JOIN  DBA_USERS U
+ON U.DEFAULT_TABLESPACE = DT.TABLESPACE_NAME
+AND DT.TABLESPACE_NAME LIKE '%CORREIO%'
+AND U.PROFILE NOT      IN ('DEFAULT','MONITORING_PROFILE','CRMALL_4C_CLIENTES_USER','HOMOLOGACAO','CRMALL_4C_INTERNO_USER');
 EOF
 }
 
-function total_size_tbs_system() {
+function total_tbs_system() {
+
 $SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
 SET PAGESIZE 0
 SET FEEDBACK OFF
 SET HEADING OFF
 set numformat 99999999999999999999
-SET PAGESIZE 0
-SET FEEDBACK OFF
-SET HEADING OFF
-SELECT BYTES FROM DBA_DATA_FILES WHERE TABLESPACE_NAME LIKE '%SYSTEM%';
+SELECT SUM(DT.BYTES)
+FROM DBA_DATA_FILES DT
+INNER JOIN  DBA_USERS U
+ON U.DEFAULT_TABLESPACE = DT.TABLESPACE_NAME
+AND DT.TABLESPACE_NAME LIKE '%SYSTEM%'
+AND U.PROFILE NOT      IN ('DEFAULT','MONITORING_PROFILE','CRMALL_4C_CLIENTES_USER','HOMOLOGACAO','CRMALL_4C_INTERNO_USER');
 EOF
 }
 
 function lista_tablespace() {
-cd /var/lib/zabbix/scripts
+cd /var/lib/zabbix/scripts/oracle-zabbix/
 
-$SQLPLUS -S $USERNAME/$PASSWORD>tablespaces_3 2>&1 <<EOF
+$SQLPLUS -S $USERNAME/$PASSWORD>tablespaces 2>&1 <<EOF
 SET PAGESIZE 0
 SET FEEDBACK OFF
 SET HEADING OFF
-SELECT DISTINCT DT.TABLESPACE_NAME FROM DBA_TABLESPACES DT INNER JOIN
-DBA_USERS U ON DT.TABLESPACE_NAME = U.DEFAULT_TABLESPACE AND  U.USERNAME IN (SELECT USERNAME FROM DBA_USERS WHERE USERNAME LIKE '%CRMALL%' OR USERNAME LIKE '%CLIENTE%' OR USERNAME LIKE '%CORREIO%' OR USERNAME LIKE '%SYSTEM%')
-ORDER BY DT.TABLESPACE_NAME
+SELECT DT.TABLESPACE_NAME FROM DBA_TABLESPACES DT INNER JOIN
+DBA_USERS U ON DT.TABLESPACE_NAME = U.DEFAULT_TABLESPACE AND  U.PROFILE NOT IN ('MONITORING_PROFILE','DEFAULT','CRMALL_4C_CLIENTES_USER','HOMOLOGACAO')
+AND DT.TABLESPACE_NAME <> 'USERS'
+ORDER BY USERNAME
 /
+--SELECT DEFAULT_TABLESPACE FROM DBA_USERS WHERE PROFILE = 'CRMALL_4C_CLIENTES';
+
 EOF
 
 
-TOTAL=`${CAT} tablespaces_3 | ${WC} -l`
+TOTAL=`cat tablespaces | wc -l`
 i=0
 
 # Cria lista JSON
 
-echo "{" > lista_tablespaces_3
-echo "  \"data\":[" >> lista_tablespaces_3
+echo "{" > lista_tablespaces
+echo "  \"data\":[" >> lista_tablespaces
 
-for X in `${CAT} tablespaces_3`; do
+for X in `cat tablespaces`; do
 
 i=$((i+1))
 
 
 if [ $TOTAL -eq $i ]; then
-echo "  { \"{#TABLESPACE}\":\"${X}\"}" >> lista_tablespaces_3
+echo "  { \"{#TABLESPACE}\":\"${X}\"}" >> lista_tablespaces
 else
-echo "  { \"{#TABLESPACE}\":\"${X}\"}," >> lista_tablespaces_3
+echo "  { \"{#TABLESPACE}\":\"${X}\"}," >> lista_tablespaces
 fi
 done
 
-echo "   ]" >> lista_tablespaces_3
-echo "}" >> lista_tablespaces_3
+echo "   ]" >> lista_tablespaces
+echo "}" >> lista_tablespaces
 
-rm tablespaces_3
+rm tablespaces
 
 exit 0;
 
 }
 
-function used_tablespace_crmall() {
+
+function lista_users() {
+cd /var/lib/zabbix/scripts/oracle-zabbix/
+
+$SQLPLUS -S $USERNAME/$PASSWORD>users 2>&1 <<EOF
+SET PAGESIZE 0
+SET FEEDBACK OFF
+SET HEADING OFF
+SELECT U.USERNAME FROM DBA_USERS U WHERE  U.PROFILE NOT IN ('MONITORING_PROFILE','DEFAULT','HOMOLOGACAO','SYSTEM')
+ORDER BY U.USERNAME
+/
+
+EOF
+
+
+TOTALUSER=`cat users | wc -l`
+ii=0
+
+# Cria lista JSON
+
+echo "{" > lista_users
+echo "  \"data\":[" >> lista_users
+
+for X in `cat users`; do
+
+ii=$((ii+1))
+
+
+if [ $TOTALUSER -eq $ii ]; then
+echo "  { \"{#USER}\":\"${X}\"}" >> lista_users
+else
+echo "  { \"{#USER}\":\"${X}\"}," >> lista_users
+fi
+done
+
+echo "   ]" >> lista_users
+echo "}" >> lista_users
+
+rm users
+
+exit 0;
+
+}
+
+function used_tbs_crmall() {
 
 $SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
 SET PAGESIZE 0
 SET FEEDBACK OFF
 SET HEADING OFF
 set numformat 99999999999999999999
-SELECT SUM(DS.BYTES) FROM DBA_SEGMENTS DS
-INNER JOIN DBA_TABLESPACES DT
-ON DT.TABLESPACE_NAME = DS.TABLESPACE_NAME
-AND DS.TABLESPACE_NAME LIKE '%CRMALL%'
-GROUP BY DS.TABLESPACE_NAME;
+SELECT
+  SUM(BYTES)
+FROM
+  DBA_SEGMENTS
+WHERE
+  TABLESPACE_NAME = (SELECT DEFAULT_TABLESPACE FROM DBA_USERS WHERE USERNAME LIKE '%CRMALL%' AND PROFILE NOT IN ('DEFAULT','MONITORING_PROFILE'))
+GROUP BY
+  TABLESPACE_NAME;
 EOF
 }
 
-function used_tablespace_cliente() {
+function used_tbs_cliente() {
 
 $SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
 SET PAGESIZE 0
 SET FEEDBACK OFF
 SET HEADING OFF
 set numformat 99999999999999999999
-SELECT SUM(DS.BYTES) FROM DBA_SEGMENTS DS
-INNER JOIN DBA_TABLESPACES DT
-ON DT.TABLESPACE_NAME = DS.TABLESPACE_NAME
-AND DS.TABLESPACE_NAME LIKE '%CLIENTE%'
-GROUP BY DS.TABLESPACE_NAME;
+SELECT
+  SUM(BYTES)
+FROM
+  DBA_SEGMENTS
+WHERE
+  TABLESPACE_NAME = (SELECT DEFAULT_TABLESPACE FROM DBA_USERS WHERE USERNAME LIKE '%CLIENTE%' AND PROFILE NOT IN ('DEFAULT','MONITORING_PROFILE'))
+GROUP BY
+  TABLESPACE_NAME;
 EOF
 }
 
-function used_tablespace_correio() {
+function used_tbs_correio() {
 
 $SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
 SET PAGESIZE 0
 SET FEEDBACK OFF
 SET HEADING OFF
 set numformat 99999999999999999999
-SELECT SUM(DS.BYTES) FROM DBA_SEGMENTS DS
-INNER JOIN DBA_TABLESPACES DT
-ON DT.TABLESPACE_NAME = DS.TABLESPACE_NAME
-AND DS.TABLESPACE_NAME LIKE '%CORREIO%'
-GROUP BY DS.TABLESPACE_NAME;
+SELECT
+  SUM(BYTES)
+FROM
+  DBA_SEGMENTS
+WHERE
+  TABLESPACE_NAME = (SELECT DEFAULT_TABLESPACE FROM DBA_USERS WHERE USERNAME LIKE '%CORREIO%' AND PROFILE NOT IN ('DEFAULT','MONITORING_PROFILE'))
+GROUP BY
+  TABLESPACE_NAME;
 EOF
 }
 
-function used_tablespace_system() {
+function used_tbs_system() {
 
 $SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
 SET PAGESIZE 0
 SET FEEDBACK OFF
 SET HEADING OFF
 set numformat 99999999999999999999
-SELECT SUM(DS.BYTES) FROM DBA_SEGMENTS DS
-INNER JOIN DBA_TABLESPACES DT
-ON DT.TABLESPACE_NAME = DS.TABLESPACE_NAME
-AND DS.TABLESPACE_NAME LIKE '%SYSTEM%'
-GROUP BY DS.TABLESPACE_NAME;
+SELECT
+  SUM(BYTES)
+FROM
+  DBA_SEGMENTS
+WHERE
+  TABLESPACE_NAME = (SELECT DEFAULT_TABLESPACE FROM DBA_USERS WHERE USERNAME LIKE '%SYSTEM%' AND PROFILE NOT IN ('DEFAULT','MONITORING_PROFILE'))
+GROUP BY
+  TABLESPACE_NAME;
 EOF
 }
 
+function account_status_crmall() {
+$SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
+SET PAGESIZE 0
+SET FEEDBACK OFF
+SET HEADING OFF
+SELECT
+  CASE
+    WHEN ACCOUNT_STATUS = 'OPEN'
+    THEN '0'
+    WHEN ACCOUNT_STATUS = 'LOCKED'
+    THEN '1'
+    WHEN ACCOUNT_STATUS = 'EXPIRED'
+    THEN '2'
+    WHEN ACCOUNT_STATUS = 'EXPIRED(GRACE)'
+    THEN '3'
+    WHEN ACCOUNT_STATUS = 'LOCKED(TIME)'
+    THEN '4'
+    END AS ACCOUNT_STATUS
+    FROM DBA_USERS
+WHERE USERNAME = (SELECT USERNAME FROM DBA_USERS WHERE USERNAME LIKE '%CRMALL%' AND PROFILE NOT IN ('DEFAULT','MONITORING_PROFILE'))
+/
+EOF
+}
 
+function account_status_cliente() {
+$SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
+SET PAGESIZE 0
+SET FEEDBACK OFF
+SET HEADING OFF
+SELECT
+  CASE
+    WHEN ACCOUNT_STATUS = 'OPEN'
+    THEN '0'
+    WHEN ACCOUNT_STATUS = 'LOCKED'
+    THEN '1'
+    WHEN ACCOUNT_STATUS = 'EXPIRED'
+    THEN '2'
+    WHEN ACCOUNT_STATUS = 'EXPIRED(GRACE)'
+    THEN '3'
+    WHEN ACCOUNT_STATUS = 'LOCKED(TIME)'
+    THEN '4'
+    END AS ACCOUNT_STATUS
+    FROM DBA_USERS
+WHERE USERNAME = (SELECT USERNAME FROM DBA_USERS WHERE USERNAME LIKE '%CLIENTE%' AND PROFILE NOT IN ('DEFAULT','MONITORING_PROFILE'))
+/
+EOF
+}
+
+function account_status_correio() {
+$SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
+SET PAGESIZE 0
+SET FEEDBACK OFF
+SET HEADING OFF
+SELECT
+  CASE
+    WHEN ACCOUNT_STATUS = 'OPEN'
+    THEN '0'
+    WHEN ACCOUNT_STATUS = 'LOCKED'
+    THEN '1'
+    WHEN ACCOUNT_STATUS = 'EXPIRED'
+    THEN '2'
+    WHEN ACCOUNT_STATUS = 'EXPIRED(GRACE)'
+    THEN '3'
+    WHEN ACCOUNT_STATUS = 'LOCKED(TIME)'
+    THEN '4'
+    END AS ACCOUNT_STATUS
+    FROM DBA_USERS
+WHERE USERNAME = (SELECT USERNAME FROM DBA_USERS WHERE USERNAME LIKE '%CORREIO%' AND PROFILE NOT IN ('DEFAULT','MONITORING_PROFILE'))
+/
+EOF
+}
+
+function account_status_system() {
+$SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
+SET PAGESIZE 0
+SET FEEDBACK OFF
+SET HEADING OFF
+SELECT
+  CASE
+    WHEN ACCOUNT_STATUS = 'OPEN'
+    THEN '0'
+    WHEN ACCOUNT_STATUS = 'LOCKED'
+    THEN '1'
+    WHEN ACCOUNT_STATUS = 'EXPIRED'
+    THEN '2'
+    WHEN ACCOUNT_STATUS = 'EXPIRED(GRACE)'
+    THEN '3'
+    WHEN ACCOUNT_STATUS = 'LOCKED(TIME)'
+    THEN '4'
+    END AS ACCOUNT_STATUS
+    FROM DBA_USERS
+WHERE USERNAME = (SELECT USERNAME FROM DBA_USERS WHERE USERNAME LIKE '%SYSTEM%' AND PROFILE NOT IN ('DEFAULT','MONITORING_PROFILE'))
+/
+EOF
+}
 
 function database_name() {
 $SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
@@ -413,20 +602,7 @@ $SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
 SET PAGESIZE 0
 SET FEEDBACK OFF
 SET HEADING OFF
-SELECT OBJECT_NAME FROM DBA_OBJECTS WHERE STATUS = 'INVALID' AND OWNER = 'CRMALL_CPSAJ' AND OBJECT_NAME NOT LIKE '%SYS%' AND OBJECT_NAME NOT LIKE '%BIN%';
-EOF
-}
-
-function usuarios_4c_conectados() {
-
-$SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
-SET PAGESIZE 0
-SET FEEDBACK OFF
-SET HEADING OFF
-SELECT VS.SID FROM DBA_USERS U INNER JOIN V\$SESSION VS
-ON VS.USER# = U.USER_ID
-AND U.PROFILE IN ('CRMALL_4C_CLIENTES','CRMALL_4C_CLIENTES_USER')
-/
+SELECT OBJECT_NAME FROM DBA_OBJECTS WHERE STATUS = 'INVALID' AND OWNER = '$1';
 EOF
 }
 
@@ -438,30 +614,6 @@ SET HEADING OFF
 SELECT VS.SID FROM DBA_USERS U INNER JOIN V\$SESSION VS
 ON VS.USER# = U.USER_ID
 AND U.PROFILE IN ('CRMALL_3_CLIENTES')
-/
-EOF
-}
-
-function usuarios_antecipado_conectados () {
-$SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
-SET PAGESIZE 0
-SET FEEDBACK OFF
-SET HEADING OFF
-SELECT VS.SID FROM DBA_USERS U INNER JOIN V\$SESSION VS
-ON VS.USER# = U.USER_ID
-AND U.PROFILE = ('ANTECIPADO')
-/
-EOF
-}
-
-function usuarios_baseunica_conectados () {
-$SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
-SET PAGESIZE 0
-SET FEEDBACK OFF
-SET HEADING OFF
-SELECT VS.SID FROM DBA_USERS U INNER JOIN V\$SESSION VS
-ON VS.USER# = U.USER_ID
-AND U.PROFILE = ('BASE_UNICA')
 /
 EOF
 }
@@ -530,7 +682,7 @@ $SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
 SET PAGESIZE 0
 SET FEEDBACK OFF
 SET HEADING OFF
-SELECT SUBSTR(BANNER,1,(INSTR(BANNER,'-',-4))) FROM V\$VERSION WHERE BANNER LIKE '%Oracle Database%';
+SELECT TRIM(SUBSTR(BANNER,1,(INSTR(BANNER,' ',20)))) AS DB_VERSION FROM V\$VERSION WHERE BANNER LIKE '%Oracle Database%';
 EOF
 }
 
@@ -539,7 +691,7 @@ $SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
 SET PAGESIZE 0
 SET FEEDBACK OFF
 SET HEADING OFF
-SELECT SUBSTR(BANNER,20,(INSTR(BANNER,' ',30))) FROM V\$VERSION WHERE BANNER LIKE '%Oracle%Release%';
+SELECT TRIM(REGEXP_REPLACE(SUBSTR(BANNER,(INSTR(BANNER,'.',4))-2),'[^12357890.]+', '')) AS DB_RELEASE FROM V\$VERSION WHERE BANNER LIKE '%Oracle Database%';
 EOF
 }
 
@@ -584,26 +736,26 @@ $SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
 SET PAGESIZE 0
 SET FEEDBACK OFF
 SET HEADING OFF
-SELECT to_char(sum(decode(event,'control file sequential read', total_waits, 
-'control file single write', total_waits, 'control file parallel write',total_waits,0))) ControlFileIO 
-FROM V\$system_event WHERE 1=1 AND event not in ( 
-  'SQL*Net message from client', 
-  'SQL*Net more data from client', 
-  'pmon timer', 'rdbms ipc message', 
+SELECT to_char(sum(decode(event,'control file sequential read', total_waits,
+'control file single write', total_waits, 'control file parallel write',total_waits,0))) ControlFileIO
+FROM V\$system_event WHERE 1=1 AND event not in (
+  'SQL*Net message from client',
+  'SQL*Net more data from client',
+  'pmon timer', 'rdbms ipc message',
   'rdbms ipc reply', 'smon timer');
 EOF
  }
-  
+
 function waits_logwrite () {
 $SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
 SET PAGESIZE 0
 SET FEEDBACK OFF
 SET HEADING OFF
-SELECT to_char(sum(decode(event,'log file single write',total_waits, 'log file parallel write',total_waits,0))) LogWrite 
-FROM V\$system_event WHERE 1=1 AND event not in ( 
-  'SQL*Net message from client', 
-  'SQL*Net more data from client', 
-  'pmon timer', 'rdbms ipc message', 
+SELECT to_char(sum(decode(event,'log file single write',total_waits, 'log file parallel write',total_waits,0))) LogWrite
+FROM V\$system_event WHERE 1=1 AND event not in (
+  'SQL*Net message from client',
+  'SQL*Net more data from client',
+  'pmon timer', 'rdbms ipc message',
   'rdbms ipc reply', 'smon timer');
 EOF
 }
@@ -613,11 +765,11 @@ $SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
 SET PAGESIZE 0
 SET FEEDBACK OFF
 SET HEADING OFF
-SELECT to_char(sum(decode(event,'db file scattered read',total_waits,0))) MultiBlockRead 
-FROM V\$system_event WHERE 1=1 AND event not in ( 
-  'SQL*Net message from client', 
-  'SQL*Net more data from client', 
-  'pmon timer', 'rdbms ipc message', 
+SELECT to_char(sum(decode(event,'db file scattered read',total_waits,0))) MultiBlockRead
+FROM V\$system_event WHERE 1=1 AND event not in (
+  'SQL*Net message from client',
+  'SQL*Net more data from client',
+  'pmon timer', 'rdbms ipc message',
   'rdbms ipc reply', 'smon timer');
 EOF
 }
@@ -626,7 +778,7 @@ function waits_other () {
 $SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
 SET PAGESIZE 0
 SET FEEDBACK OFF
-SET HEADING OFF  
+SET HEADING OFF
 SELECT to_char(sum(decode(event,'control file sequential read',0,'control file single write',0,'control file parallel write',0,'db file sequential read',0,'db file scattered read',0,'direct path read',0,'file identify',0,'file open',0,'SQL*Net message to client',0,'SQL*Net message to dblink',0, 'SQL*Net more data to client',0,'SQL*Net more data to dblink',0, 'SQL*Net break/reset to client',0,'SQL*Net break/reset to dblink',0, 'log file single write',0,'log file parallel write',0,total_waits))) Other FROM V\$system_event WHERE 1=1 AND event not in (  'SQL*Net message from client', 'SQL*Net more data from client', 'pmon timer', 'rdbms ipc message',  'rdbms ipc reply', 'smon timer');
 EOF
 }
@@ -636,11 +788,11 @@ $SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
 SET PAGESIZE 0
 SET FEEDBACK OFF
 SET HEADING OFF
-SELECT to_char(sum(decode(event,'db file sequential read',total_waits,0))) SingleBlockRead 
-FROM V\$system_event WHERE 1=1 AND event not in ( 
-  'SQL*Net message from client', 
-  'SQL*Net more data from client', 
-  'pmon timer', 'rdbms ipc message', 
+SELECT to_char(sum(decode(event,'db file sequential read',total_waits,0))) SingleBlockRead
+FROM V\$system_event WHERE 1=1 AND event not in (
+  'SQL*Net message from client',
+  'SQL*Net more data from client',
+  'pmon timer', 'rdbms ipc message',
   'rdbms ipc reply', 'smon timer');
 EOF
 }
@@ -986,285 +1138,247 @@ from
 EOF
 }
 
-function qtd_estacoes_online () {
-$SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
-SET PAGESIZE 0
-SET FEEDBACK OFF
-SET HEADING OFF
-SELECT COUNT(DISTINCT(MACHINE)) FROM V\$SESSION WHERE USERNAME IS NOT NULL AND TERMINAL   <> 'unknown' AND TERMINAL NOT LIKE '%pts/%'; 
-EOF
-}
-
-function usuarios_crmall_online () {
-$SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
-SET PAGESIZE 0
-SET FEEDBACK OFF
-SET HEADING OFF
-SELECT  COUNT(DISTINCT(SID))  FROM V\$SESSION WHERE USERNAME IS NOT NULL AND TERMINAL <> 'unknown';
-EOF
-}
-
-function usuarios_wiseit_online () {
-$SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
-SET PAGESIZE 0
-SET FEEDBACK OFF
-SET HEADING OFF
-SELECT  COUNT(DISTINCT(SID))  FROM V\$SESSION WHERE OSUSER = 'wiseit';
-EOF
-}
-
 case $1 in
-							"lista_tablespace")
-													 lista_tablespace 
-													 ;;
+                "oracle_env")
+                           oracle_env
+                           ;;
+                        
+                "gen_pass_for_zabbix")
+                           gen_pass_for_zabbix
+                           ;;
+                        
+                "verify_user_zabbix")
+                           verify_user_zabbix 
+                           ;;
 
-                 "gen_pass_for_zabbix")
-										  			 gen_pass_for_zabbix
-													 ;;
-						   					
-                 "validate_password")
-										  			 validate_password
-													 ;;
-						   					
-                 "validation_password")
-										  			 validation_password
-													 ;;
-						   					
-							"verify_user_zabbix")
-													 verify_user_zabbix 
-													 ;;
+                "lista_tablespace")
+                          lista_tablespace
+                           ;;
 
-							  "total_size_tbs_crmall")
-													 total_size_tbs_crmall
-													 ;;
+                "lista_users")
+                           lista_users
+                           ;;
 
-							  "total_size_tbs_cliente")
-													 total_size_tbs_cliente
-													 ;;
+                "total_tbs_crmall")
+                           total_tbs_crmall
+                           ;;
 
-							  "total_size_tbs_correio")
-													 total_size_tbs_correio
-													 ;;
+                "total_tbs_cliente")
+                           total_tbs_cliente
+                           ;;
 
-							  "total_size_tbs_system")
-													 total_size_tbs_system
-													 ;;
+                "total_tbs_correio")
+                           total_tbs_correio
+                           ;;
 
-						   "used_tablespace_crmall")
-													 used_tablespace_crmall
-													 ;;
+                "total_tbs_system")
+                           total_tbs_system
+                           ;;
 
-						   "used_tablespace_cliente")
-													 used_tablespace_cliente
-													 ;;
+                "used_tbs_crmall")
+                           used_tbs_crmall
+                           ;;
 
-						   "used_tablespace_correio")
-													 used_tablespace_correio
-													 ;;
+                "used_tbs_cliente")
+                           used_tbs_cliente
+                           ;;
 
-						   "used_tablespace_system")
-													 used_tablespace_system
-													 ;;
+                "used_tbs_correio")
+                           used_tbs_correio
+                           ;;
 
-							   "database_name")
-													 database_name
-													 ;;
+                "used_tbs_system")
+                           used_tbs_system
+                           ;;
 
-						  "objetos_invalidos")
-													 objetos_invalidos $2 
-							  						 ;;
+                "database_name")
+                           database_name
+                           ;;
 
-					 "usuarios_4c_conectados")
-										  			 usuarios_4c_conectados | wc -l
-							  						 ;;
+                "objetos_invalidos")
+                           objetos_invalidos $2
+                             ;;
 
-					  "usuarios_3_conectados")
-										 			 usuarios_3_conectados |  wc -l
-							  						 ;;
+                "usuarios_3_conectados")
+                           usuarios_3_conectados |  wc -l
+                             ;;
 
-		  "usuarios_antecipado_conectados")
-										  			 usuarios_antecipado_conectados |  wc -l
-													 ;;
+                "db_archivelog_status")
+                            db_archivelog_status |  wc -l
+                           ;;
 
-		  "usuarios_baseunica_conectados")
-										  			 usuarios_baseunica_conectados |  wc -l
-													 ;;
+                "db_archived_last")
+                            db_archived_last
+                           ;;
 
-					  "db_archivelog_status")
-										  			db_archivelog_status | wc -l
-													 ;;
+                "db_archivelog_last_seq")
+                           db_archivelog_last_seq | tail -1 |sed 's/  *//g'
+                           ;;
 
-  						   "db_archived_last")
- 										  			db_archived_last
-													 ;;
+                "db_alive")
+                           db_alive | wc -l
+                           ;;
 
-				   "db_archivelog_last_seq")
-										  			db_archivelog_last_seq | tail -1 |sed 's/  *//g'
-													 ;;
+                "db_total_size")
+                           db_total_size |  sed 's/  *//g'
+                           ;;
 
-					   			  "db_alive")
-										  			db_alive | wc -l
-													 ;;
+                "db_used_size")
+                           db_used_size |  sed 's/  *//g'
+                           ;;
 
-					   			  "db_total_size")
-										  			db_total_size |  sed 's/  *//g'
-													 ;;
+                "db_version")
+                           db_version
+                           ;;
 
-					   			  "db_used_size")
-										  			db_used_size |  sed 's/  *//g'
-													 ;;
+                "db_release")
+                           db_release
+                           ;;
 
-					   			  "db_version")
-										  			db_version | cut -d- -f1  | awk {'print $1,$2,$3}'
-													 ;;
+                "index_invalid")
+                           index_invalid $2
+                           ;;
 
-					   			  "db_release")
-										  			db_release | cut -d- -f1 | awk {'print $5}'
-													 ;;
+                "waits_controlfileio")
+                           waits_controlfileio
+                           ;;
 
-					   		  "index_invalid")
-										  			 index_invalid $2
-													 ;;
+                "waits_directpath_read")
+                           waits_directpath_read
+                           ;;
 
-			   		  "waits_controlfileio")
-										  			 waits_controlfileio 
-													 ;;
+                "waits_file_io")
+                           waits_file_io
+                           ;;
 
-  		   		   "waits_directpath_read")
-										  			 waits_directpath_read 
-													 ;;
+                "waits_latch")
+                           waits_latch
+                           ;;
 
-					   		  "waits_file_io")
-										  			 waits_file_io 
-													 ;;
+                "waits_logwrite")
+                           waits_logwrite
+                           ;;
 
-					   		    "waits_latch")
-										  			 waits_latch 
-													 ;;
+                "waits_multiblock_read")
+                           waits_multiblock_read
+                           ;;
 
-					   	    "waits_logwrite")
-										  			 waits_logwrite
-													 ;;
+                "waits_other")
+                           waits_other
+                           ;;
 
-					   "waits_multiblock_read")
-										  			 waits_multiblock_read
-													 ;;
+                "waits_singleblock_read")
+                           waits_singleblock_read
+                           ;;
 
-					   		    "waits_other")
-										  			 waits_other
-													 ;;
+                "waits_sqlnet")
+                           waits_sqlnet
+                           ;;
 
-			        "waits_singleblock_read")
-										  			 waits_singleblock_read
-													 ;;
+                "pga_aggregat_target")
+                           pga_aggregat_target
+                           ;;
 
-					   		   "waits_sqlnet")
-										  			 waits_sqlnet
-													 ;;
-						   					
-					     "pga_aggregat_target")
-										  			 pga_aggregat_target
-													 ;;
-						   					
-					                     "pga")
-										  			 pga
-													 ;;
-						   					
-							  "sga_buffer_cache")
-										  			 sga_buffer_cache
-													 ;;
-						   					
-										"sga_fixed")
-										  			 sga_fixed
-													 ;;
-						   					
-								  "sga_java_pool")
-										  			 sga_java_pool
-													 ;;
-						   					
-								 "sga_large_pool")
-										  			 sga_large_pool
-													 ;;
-						   					
-								 "sga_log_buffer")
-										  			 sga_log_buffer
-													 ;;
-						   					
-								"sga_shared_pool_total")
-										  			 sga_shared_pool_total
-													 ;;
-						   					
-								"sga_shared_pool_used")
-										  			 sga_shared_pool_used
-													 ;;
-						   					
-								"sga_shared_pool_free")
-										  			 sga_shared_pool_free
-													 ;;
-						   					
-								     "sga_target")
-										  			 sga_target
-													 ;;
-						   					
-									"sga_max_size")
-										  			 sga_max_size
-													 ;;
-						   					
-	  									 "sga_free")
-										  			 sga_free
-													 ;;
-						   					
-									    "sga_used")
-										  			 sga_used
-													 ;;
-						   					
-									"db_hit_rate")
-										  			 db_hit_rate
-													 ;;
-						   					
-				"session_cached_cursor_value")
-										  			 session_cached_cursor_value
-													 ;;
-						   					
-				"session_cached_cursor_used")
-										  			 session_cached_cursor_used
-													 ;;
-						   					
-				"session_cached_cursor_pct_used")
-										  			 session_cached_cursor_pct_used
-													 ;;
-						   					
-  				        "open_cursors_total")
-										  			 open_cursors_total
-													 ;;
-						   					
-  				        "open_cursors_used")
-										  			 open_cursors_used
-													 ;;
-						   					
-                 "open_cursors_pct_used")
-										  			 open_cursors_pct_used
-													 ;;
-						   					
-                 "qtd_estacoes_online")
-										  			 qtd_estacoes_online
-													 ;;
-						   					
-                 "usuarios_crmall_online")
-										  			 usuarios_crmall_online
-													 ;;
-						   					
-                 "usuarios_wiseit_online")
-										  			 usuarios_wiseit_online
-													 ;;
-						   					
-												    *)
-											       echo "Argumento Invalido"
-													 show_options
-										          echo " Utilize apenas um desses: ${LIST1}"| more
-												    ;;		
+                "pga")
+                           pga
+                           ;;
+
+                "sga_buffer_cache")
+                           sga_buffer_cache
+                           ;;
+
+                "sga_fixed")
+                           sga_fixed
+                           ;;
+
+                "sga_java_pool")
+                           sga_java_pool
+                           ;;
+
+                "sga_large_pool")
+                           sga_large_pool
+                           ;;
+
+                "sga_log_buffer")
+                           sga_log_buffer
+                           ;;
+
+                "sga_shared_pool_total")
+                           sga_shared_pool_total
+                           ;;
+
+                "sga_shared_pool_used")
+                           sga_shared_pool_used
+                           ;;
+
+                "sga_shared_pool_free")
+                           sga_shared_pool_free
+                           ;;
+
+                "sga_target")
+                           sga_target
+                           ;;
+
+                "sga_max_size")
+                           sga_max_size
+                           ;;
+
+                "sga_free")
+                           sga_free
+                           ;;
+
+                "sga_used")
+                           sga_used
+                           ;;
+
+                "db_hit_rate")
+                           db_hit_rate
+                           ;;
+
+                "session_cached_cursor_value")
+                           session_cached_cursor_value
+                           ;;
+
+                "session_cached_cursor_used")
+                           session_cached_cursor_used
+                           ;;
+
+                "session_cached_cursor_pct_used")
+                           session_cached_cursor_pct_used
+                           ;;
+
+                "open_cursors_total")
+                           open_cursors_total
+                           ;;
+
+                "open_cursors_used")
+                           open_cursors_used
+                           ;;
+
+                "open_cursors_pct_used")
+                           open_cursors_pct_used
+                           ;;
+
+                "account_status_crmall")
+                           account_status_crmall
+                           ;;
+
+                "account_status_cliente")
+                           account_status_cliente
+                           ;;
+
+                "account_status_correio")
+                           account_status_correio
+                           ;;
+
+                "account_status_system")
+                           account_status_system
+                           ;;
+
+                           *)
+                echo "Argumento Invalido"
+                echo " Utilize apenas um desses: ${LIST1}"
+                           ;;
 
 esac
-
-
 exit 0
