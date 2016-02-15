@@ -279,10 +279,13 @@ fi
 ##
 ## Load Zabbix User Variables #
 if [ -f $CONFIG_FILE ]; then
-   	. $CONFIG_FILE            #
-else 
-		echo "Creating  Zabbix User Config File..."
-		verify_user_zabbix
+      . $CONFIG_FILE            #
+      echo "Usuario Zabbix Existente, pronto para utilizar"
+
+else
+      echo "Creating  Zabbix User Config File..."
+      verify_user_zabbix
+
 fi
 ##                    #
 ##
