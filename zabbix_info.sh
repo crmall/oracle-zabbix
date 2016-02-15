@@ -330,7 +330,7 @@ EOF
 }
 
 function lista_tablespace() {
-cd /var/lib/zabbix/scripts/oracle-zabbix/
+cd /var/lib/zabbix/scripts/
 
 $SQLPLUS -S $USERNAME/$PASSWORD>tablespaces 2>&1 <<EOF
 SET PAGESIZE 0
@@ -377,7 +377,7 @@ exit 0;
 
 
 function lista_users() {
-cd /var/lib/zabbix/scripts/oracle-zabbix/
+cd /var/lib/zabbix/scripts/
 
 $SQLPLUS -S $USERNAME/$PASSWORD>users 2>&1 <<EOF
 SET PAGESIZE 0
