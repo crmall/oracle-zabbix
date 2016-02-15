@@ -2,13 +2,19 @@
 
 # ------------------------------#
 # Oracle - Zabbix Info (CRMALL) #
-#                     #
-# Josue Pirolo 03/2015        #
+#                               #
+# Josue Pirolo 03/2015          #
 # ------------------------------#
-
+##
+## Menu
+## Execute the Following:
+## 1 - zabbix_info.sh oracle_env
+## 2 - zabbix_info.sh verify_user_zabbix
+##
+##
 # Variables
 
-# Applications
+# Tools
 DATA=$(date +%Y-%m-%d)
 DATA_HORA=$(date +%Y-%m-%d-%H_%M_%S)
 CAT=$(which cat)
@@ -20,50 +26,12 @@ HEAD=$(which head)
 WC=$(which wc)
 SQLPLUS=$(which sqlplus)
 RM=$(which rm)
+
+# Config Files Path
 CONFIG_FILE="/var/lib/zabbix/scripts/oracle-zabbix/config_user"
 ORACLE_FILE="/var/lib/zabbix/scripts/oracle-zabbix/config_oracle"
 ##
 
-##
-##
-# Oracle Variables
-
-##
-##
-##
-##
-# Isolated Oracle Variable Environment Function
-function oracle_env () {
-#
-VERSAO_10="/usr/lib/oracle/xe/app/oracle/product/10.2.0/server/bin/oracle_env.sh"
-VERSAO_11="/u01/app/oracle/product/11.2.0/xe/bin/oracle_env.sh"
-
-if   [ -f $VERSAO_10  ]; then
-	cat $VERSAO_10 > $ORACLE_FILE
-	exit 0
-elif [ -f $VERSAO_11 ]; then
-	cat $VERSAO_11 > $ORACLE_FILE
-	exit 0
-else
-	echo "No Oracle Database Installed"
-	exit 1
-fi
-}
-##
-##
-##
-##
-# Oracle Paths
-# Carrega configuracoes
-if [ -f $ORACLE_FILE ]; then
-   . $ORACLE_FILE
-else
-   echo "Sem arquivo de variavies de ambiente do Oracle..Executando function oracle_env agora..."
-	oracle_env
-fi
-##
-##
-##
 ##
 # functions
 
@@ -93,11 +61,12 @@ SET HEADING OFF
 SELECT COUNT(USERNAME) FROM DBA_USERS WHERE USERNAME ='ZABBIX';
 EOF
 )
-echo $RETORNO
+#echo $RETORNO
 ##
 ##
 if [ ${RETORNO} -eq 1 ]; then
   echo "Usuario existente"
+  exit 0
 else
   echo "Usuario nao existe...Inicializando processo de criacao"
   gen_pass_for_zabbix
@@ -148,6 +117,10 @@ GRANT CREATE SESSION TO ZABBIX
 GRANT CONNECT TO ZABBIX
 /
 ALTER USER ZABBIX DEFAULT ROLE ALL
+/
+GRANT ALTER USER TO ZABBIX
+/
+GRANT CREATE PROCEDURE TO ZABBIX
 /
 GRANT SELECT ON V_\$INSTANCE TO ZABBIX
 /
@@ -237,33 +210,82 @@ GRANT SELECT ON DBA_ROLES TO ZABBIX
 /
 ALTER USER SYSTEM PROFILE CRMALL_3
 /
-ALTER USER CRMALL PROFILE CRMALL_3
-/
-ALTER USER CLIENTE PROFILE CRMALL_3
-/
+-- ALTER USER CRMALL PROFILE CRMALL_3
+-- /
+-- ALTER USER CLIENTE PROFILE CRMALL_3
+-- /
 ALTER USER CORREIO PROFILE CRMALL_3
+/
+CREATE OR REPLACE FUNCTION ZABBIX.FUNC_USERNAME_LIST(PA_OPTION VARCHAR2) RETURN VARCHAR2 IS
+V_CRMALL_USER DBA_USERS.USERNAME%TYPE;
+V_CLIENTE_USER DBA_USERS.USERNAME%TYPE;
+BEGIN
+
+    SELECT USERNAME INTO V_CRMALL_USER FROM DBA_USERS WHERE USERNAME LIKE '%CRMALL%';
+    --
+    SELECT USERNAME INTO V_CLIENTE_USER FROM DBA_USERS WHERE USERNAME LIKE '%CLIENTE%';
+    
+    IF PA_OPTION = 'CRMALL' THEN 
+    RETURN V_CRMALL_USER;
+    ELSIF PA_OPTION = 'CLIENTE' THEN
+    RETURN V_CLIENTE_USER;
+    END IF;
+END;
+/
+CREATE OR REPLACE PROCEDURE ZABBIX.PROC_USERNAME_PROFILE IS
+BEGIN
+    EXECUTE IMMEDIATE ('ALTER USER '||(FUNC_USERNAME_LIST('CRMALL'))||' PROFILE CRMALL_3');
+    --
+    EXECUTE IMMEDIATE ('ALTER USER '||(FUNC_USERNAME_LIST('CLIENTE'))||' PROFILE CRMALL_3');
+END;
+/
+EXECUTE ZABBIX.PROC_USERNAME_PROFILE()
 /
 QUIT
 /" > /var/lib/zabbix/scripts/oracle-zabbix/Criar_usuario_zabbix.sql
 ##
 ##
-##
-##
 echo " "
 $SQLPLUS -S ${SYSTEM}/${SYSTEM_PASS} as sysdba @Criar_usuario_zabbix.sql
 $RM -f Criar_usuario_zabbix.sql
-##
-##
+echo "Completed Sucessfully"
 ##
 ##
 }
-###############################
-##										#
+##
+## Load Oracle Profile
+function oracle_env () {
+DIR1="/u01" # Oracle XE - Versao 11g
+DIR2="/usr/lib/oracle" # Oracle XE - Versao 10g
+##
+if [ -d ${DIR1} ]; then
+	#
+	FIND1=$(find ${DIR1} -name oracle_env.sh)
+	#
+   ${CAT} ${FIND1} > config_oracle
+	#
+   . $ORACLE_FILE
+elif [ -d ${DIR2} ]; then
+	#
+	FIND2=$(find ${DIR2} -name oracle_env.sh)
+	#
+	${CAT} ${FIND2} > config_oracle
+	#
+   . $ORACLE_FILE
+else
+	echo "Oracle Database not installed ou it is a Oracle SE1,SE or EE."
+fi
+}
+##
 ## Load Zabbix User Variables #
-. $CONFIG_FILE						#
-##										#
-###############################
-
+if [ -f $CONFIG_FILE ]; then
+   	. $CONFIG_FILE            #
+else 
+		echo "Creating  Zabbix User Config File..."
+		verify_user_zabbix
+fi
+##                    #
+##
 function total_tbs_crmall() {
 
 $SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
@@ -342,7 +364,6 @@ AND DT.TABLESPACE_NAME <> 'USERS'
 ORDER BY USERNAME
 /
 --SELECT DEFAULT_TABLESPACE FROM DBA_USERS WHERE PROFILE = 'CRMALL_4C_CLIENTES';
-
 EOF
 
 
@@ -386,7 +407,6 @@ SET HEADING OFF
 SELECT U.USERNAME FROM DBA_USERS U WHERE  U.PROFILE NOT IN ('MONITORING_PROFILE','DEFAULT','HOMOLOGACAO','SYSTEM')
 ORDER BY U.USERNAME
 /
-
 EOF
 
 
@@ -1376,8 +1396,7 @@ case $1 in
                            ;;
 
                            *)
-                echo "Argumento Invalido"
-                echo " Utilize apenas um desses: ${LIST1}"
+                echo "Informe um argumento"
                            ;;
 
 esac
