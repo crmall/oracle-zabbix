@@ -13,6 +13,7 @@
 ##     If the Oracle Variables are already set, then execute the following:
 ## 2 - zabbix_info.sh verify_user_zabbix
 ##
+##
 
 # Tools
 DATA=$(date +%Y-%m-%d)
