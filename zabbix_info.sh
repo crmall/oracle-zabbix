@@ -4,15 +4,15 @@
 # Oracle - Zabbix Info (CRMALL) #
 #                               #
 # Josue Pirolo 03/2015          #
+#        02/2016 # Update       # 
 # ------------------------------#
 ##
 ## Menu
 ## Execute the Following:
 ## 1 - zabbix_info.sh oracle_env
+##     If the Oracle Variables are already set, then execute the following:
 ## 2 - zabbix_info.sh verify_user_zabbix
 ##
-##
-# Variables
 
 # Tools
 DATA=$(date +%Y-%m-%d)
@@ -24,16 +24,70 @@ CUT=$(which cut)
 DATE=$(which date)
 HEAD=$(which head)
 WC=$(which wc)
-SQLPLUS=$(which sqlplus)
 RM=$(which rm)
+FIND=$(which find)
 
 # Config Files Path
 CONFIG_FILE="/var/lib/zabbix/scripts/oracle-zabbix/config_user"
 ORACLE_FILE="/var/lib/zabbix/scripts/oracle-zabbix/config_oracle"
-##
 
 ##
-# functions
+##
+## Oracle Variables Isolated Fuction
+##
+function oracle_env () {
+
+DIR1="/u01" # Oracle XE - Versao 11g
+DIR2="/usr/lib/oracle" # Oracle XE - Versao 10g
+##
+if [ -d ${DIR1} ]; then
+  #
+  FIND1=$(find ${DIR1} -name oracle_env.sh)
+  #
+   ${CAT} ${FIND1} > config_oracle
+  #
+   . $ORACLE_FILE
+elif [ -d ${DIR2} ]; then
+  #
+  FIND2=$(find ${DIR2} -name oracle_env.sh)
+  #
+  ${CAT} ${FIND2} > config_oracle
+  #
+   . $ORACLE_FILE
+else
+  echo "Oracle Database not installed ou it is a Oracle SE1,SE or EE."
+fi
+}
+##
+## End of Isolated Function
+##
+## Load Oracle Paths
+if [ -f ${ORACLE_FILE} ]; then
+  . ${ORACLE_FILE} 
+else
+  oracle_env
+fi
+##
+
+OS_VERSION=$(cat /etc/redhat-release | awk '{print $3}')
+CENTOS_5="5.0"
+CENTOS_6="6.0"
+
+if [ $(echo "${OS_VERSION} < ${CENTOS_6}"|bc) -eq 1 ]; then
+
+SQLPLUS=$(${FIND} $ORACLE_HOME/bin -name sqlplus)
+
+elif [ $(echo "${OS_VERSION} > ${CENTOS_6}"|bc) -eq 1 ]; then
+
+SQLPLUS=$(which sqlplus)
+
+fi
+
+##
+
+#
+## Functions
+##
 
 function password () {
 
@@ -252,45 +306,21 @@ echo "Completed Sucessfully"
 ##
 ##
 }
-##
-## Load Oracle Profile
-function oracle_env () {
-DIR1="/u01" # Oracle XE - Versao 11g
-DIR2="/usr/lib/oracle" # Oracle XE - Versao 10g
-##
-if [ -d ${DIR1} ]; then
-	#
-	FIND1=$(find ${DIR1} -name oracle_env.sh)
-	#
-   ${CAT} ${FIND1} > config_oracle
-	#
-   . $ORACLE_FILE
-elif [ -d ${DIR2} ]; then
-	#
-	FIND2=$(find ${DIR2} -name oracle_env.sh)
-	#
-	${CAT} ${FIND2} > config_oracle
-	#
-   . $ORACLE_FILE
-else
-	echo "Oracle Database not installed ou it is a Oracle SE1,SE or EE."
-fi
-}
-##
 ## Load Zabbix User Variables #
 if [ -f $CONFIG_FILE ]; then
       . $CONFIG_FILE            #
-      echo "Usuario Zabbix Existente, pronto para utilizar"
-
+#      echo "Usuario Zabbix Existente, pronto para utilizar"
 else
       echo "Creating  Zabbix User Config File..."
       verify_user_zabbix
 
 fi
 ##                    #
+#
+
+
 ##
 function total_tbs_crmall() {
-
 $SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
 SET PAGESIZE 0
 SET FEEDBACK OFF
@@ -307,7 +337,6 @@ EOF
 }
 
 function total_tbs_cliente() {
-
 $SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
 SET PAGESIZE 0
 SET FEEDBACK OFF
@@ -323,7 +352,6 @@ EOF
 }
 
 function total_tbs_correio() {
-
 $SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
 SET PAGESIZE 0
 SET FEEDBACK OFF
@@ -339,7 +367,6 @@ EOF
 }
 
 function total_tbs_system() {
-
 $SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
 SET PAGESIZE 0
 SET FEEDBACK OFF
@@ -356,7 +383,6 @@ EOF
 
 function lista_tablespace() {
 cd /var/lib/zabbix/scripts/
-
 $SQLPLUS -S $USERNAME/$PASSWORD>tablespaces 2>&1 <<EOF
 SET PAGESIZE 0
 SET FEEDBACK OFF
@@ -402,7 +428,6 @@ exit 0;
 
 function lista_users() {
 cd /var/lib/zabbix/scripts/
-
 $SQLPLUS -S $USERNAME/$PASSWORD>users 2>&1 <<EOF
 SET PAGESIZE 0
 SET FEEDBACK OFF
@@ -443,7 +468,6 @@ exit 0;
 }
 
 function used_tbs_crmall() {
-
 $SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
 SET PAGESIZE 0
 SET FEEDBACK OFF
@@ -461,7 +485,6 @@ EOF
 }
 
 function used_tbs_cliente() {
-
 $SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
 SET PAGESIZE 0
 SET FEEDBACK OFF
@@ -479,7 +502,6 @@ EOF
 }
 
 function used_tbs_correio() {
-
 $SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
 SET PAGESIZE 0
 SET FEEDBACK OFF
@@ -497,7 +519,6 @@ EOF
 }
 
 function used_tbs_system() {
-
 $SQLPLUS -S $USERNAME/$PASSWORD  <<EOF
 SET PAGESIZE 0
 SET FEEDBACK OFF
