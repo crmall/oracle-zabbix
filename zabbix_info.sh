@@ -70,7 +70,7 @@ else
 fi
 ##
 
-OS_VERSION=$(cat /etc/redhat-release | awk '{print $3}')
+OS_VERSION=$(sed -e 's/\<[a-zA-Z]*\>//g' /etc/redhat-release | sed -e 's/()//g' | tr -d " \n")
 CENTOS_5="5.0"
 CENTOS_6="6.0"
 
