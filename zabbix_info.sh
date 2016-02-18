@@ -29,8 +29,8 @@ RM=$(which rm)
 FIND=$(which find)
 
 # Config Files Path
-CONFIG_FILE="/var/lib/zabbix/scripts/oracle-zabbix/config_user"
-ORACLE_FILE="/var/lib/zabbix/scripts/oracle-zabbix/config_oracle"
+CONFIG_FILE="/var/lib/zabbix/scripts/config_user"
+ORACLE_FILE="/var/lib/zabbix/scripts/config_oracle"
 
 ##
 ##
