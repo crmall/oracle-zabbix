@@ -45,14 +45,14 @@ if [ -d ${DIR1} ]; then
   #
   FIND1=$(find ${DIR1} -name oracle_env.sh)
   #
-   ${CAT} ${FIND1} > config_oracle
+   ${CAT} ${FIND1} > ${ORACLE_FILE} 
   #
    . $ORACLE_FILE
 elif [ -d ${DIR2} ]; then
   #
   FIND2=$(find ${DIR2} -name oracle_env.sh)
   #
-  ${CAT} ${FIND2} > config_oracle
+  ${CAT} ${FIND2} > ${ORACLE_FILE}
   #
    . $ORACLE_FILE
 else
