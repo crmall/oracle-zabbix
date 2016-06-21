@@ -1,4 +1,4 @@
-# oracle-zabbix
+# Zabbix Oracle Template
 
 Created by Josué Pirolo 04/2016
 
