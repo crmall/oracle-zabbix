@@ -17,7 +17,8 @@ Informe a senha do usuario SYSADMIN<br>
 <b>*******</b><br>
 It will create the user zabbix and set the needs GRANTS and set de ORACLE_HOME paths.
 <br>
-Step 4 - Now, log in with root user and do the following:<br>
-<b> cat zabbix_agentd_conf >> /etc/zabbix/zabbix_agentd.conf</b><br>
+Step 4 - Copy userparameter_oracle.conf to zabbix_agentd.d directory:<br>
+<b> cp userparameter_oracle.conf  /etc/zabbix/zabbix_agentd.d/</b><br>
 Restart the zabbix-agent service and configure de Host in zabbix server interface.
-
+<br>
+Step 5 - Import Template_BS2_Oracle.xml to Zabbix
