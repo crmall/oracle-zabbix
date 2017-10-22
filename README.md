@@ -41,17 +41,17 @@ Os scripts devem ser instalados no servidor do banco de dados Oracle.
 mkdir -p /var/lib/zabbix/scripts/
 chown -R oracle:dba /var/lib.zabbix/scripts/
 ```
-1. Baixe os scripts
+2. Baixe os scripts
 
 ```sh
 git clone git clone https://github.com/crmall/oracle-zabbix.git
 ``` 
 
-1. Execute a primeira vez `sh zabbix.sh oracle_env` para criar o usuário zabbix com os GRANTS necessários e definir a váriavel ORACLE_HOME 
+3. Execute a primeira vez `sh zabbix.sh oracle_env` para criar o usuário zabbix com os GRANTS necessários e definir a váriavel ORACLE_HOME 
 
-1. Copie `userparameter_oracle.conf` para dentro do diretório `zabbix_agentd.d` e reinicie o `zabbix-agent`
+4. Copie `userparameter_oracle.conf` para dentro do diretório `zabbix_agentd.d` e reinicie o `zabbix-agent`
 
-1. Importe o template `Template_BS2_Oracle.xml` para dentro de seu Zabbix Server e adicione ao host. 
+5. Importe o template `Template_BS2_Oracle.xml` para dentro de seu Zabbix Server e adicione ao host. 
 
 ## Creditos
 
